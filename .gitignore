@@ -1,0 +1,31 @@
+# Binary and executable files
+# This ignores the compiled application (e.g., the 'url-shortner' file)
+url-shortner
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Environment variables
+# This is CRITICAL because you are using os.Getenv for DB credentials
+.env
+
+# Database files
+# If you ever use SQLite locally for testing
+*.db
+*.db-journal
+
+# Go-specific ignores
+vendor/
+# If you use VS Code or JetBrains, ignore their settings folders
+.vscode/
+.idea/
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Temporary/Log files
+tmp/
+*.log
