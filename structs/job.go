@@ -1,4 +1,4 @@
-package main
+package structs
 
 import (
 	"encoding/json"
@@ -18,6 +18,8 @@ const (
 type Job struct { 
    ID int `json:"id"`
    Payload json.RawMessage `json:"payload"`
+   QueueName string `json:"queue_name"`
+   UserID int `json:"user_id"`
    State JobState `json:"state"`
    Retries int `json:"retries"`
    MaxRetries int `json:"max_retries"`
@@ -25,3 +27,4 @@ type Job struct {
    CreatedAt time.Time `json:"created_at"`
    UpdatedAt time.Time `json:"updated_at"`
 }
+
