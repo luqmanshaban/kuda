@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/luqmanshaban/kuda/structs"
 )
 
@@ -97,35 +98,71 @@ func (r *JobRepository) GetJob(id int) (structs.Job, error) {
 
 // check for pending jobs
 func (r *JobRepository) FetchPending() ([]structs.Job, error) {
-	var job []structs.Job
+    tx, err := r.DB.Begin()
+    if err != nil {
+        return nil, err
+    }
+    defer tx.Rollback()
 
-	rows, err := r.DB.Query("SELECT id, payload, queue_name, user_id, state, retries, max_retries, runs_at, created_at, updated_at FROM jobs WHERE state = 'pending' AND runs_at <= NOW() LIMIT 100 FOR UPDATE SKIP LOCKED")
-	if err != nil {
-		return []structs.Job{}, err
-	}
-	defer rows.Close()
+    rows, err := tx.Query(`
+        SELECT 
+            j.id, j.payload, j.queue_name, j.user_id,
+            j.state, j.retries, j.max_retries, j.runs_at,
+            j.created_at, j.updated_at,
+            q.webhook_url
+        FROM jobs j
+        JOIN queues q ON q.name = j.queue_name
+        WHERE j.state = 'pending' AND j.runs_at <= NOW()
+        LIMIT 50
+        FOR UPDATE OF j SKIP LOCKED
+    `)
+    if err != nil {
+        return nil, err
+    }
 
-	for rows.Next() {
-		var j structs.Job
-		if err := rows.Scan(
-			&j.ID,
-			&j.Payload,
-			&j.QueueName,
-			&j.UserID,
-			&j.State,
-			&j.Retries,
-			&j.MaxRetries,
-			&j.RunsAt,
-			&j.CreatedAt,
-			&j.UpdatedAt,
-		); err != nil {
-			return []structs.Job{}, err
-		}
+    var jobs []structs.Job
+    var ids []int
 
-		job = append(job, j)
-	}
+    for rows.Next() {
+        var j structs.Job
+        if err := rows.Scan(
+            &j.ID,
+            &j.Payload,
+            &j.QueueName,
+            &j.UserID,
+            &j.State,
+            &j.Retries,
+            &j.MaxRetries,
+            &j.RunsAt,
+            &j.CreatedAt,
+            &j.UpdatedAt,
+            &j.WebhookURL,
+        ); err != nil {
+            rows.Close()
+            return nil, err
+        }
+        jobs = append(jobs, j)
+        ids = append(ids, j.ID)
+    }
+    rows.Close()
 
-	return job, err
+    if err := rows.Err(); err != nil {
+        return nil, err
+    }
+
+    if len(ids) == 0 {
+        return jobs, tx.Commit()
+    }
+
+    _, err = tx.Exec(`
+        UPDATE jobs SET state = 'running', updated_at = NOW()
+        WHERE id = ANY($1)
+    `, pq.Array(ids))
+    if err != nil {
+        return nil, err
+    }
+
+    return jobs, tx.Commit()
 }
 
 // update job status

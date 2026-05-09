@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -19,6 +24,9 @@ func main() {
 		panic(err)
 	}
 	db = ConnectToDB()
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(10)
+	db.SetConnMaxLifetime(5 * time.Minute)
 
 	// initialize repository
 	jobRepo := &repository.JobRepository{DB: db}
@@ -37,31 +45,32 @@ func main() {
 	const numWorkers = 100
 	jobCh := make(chan structs.Job, 100)
 
-	// call the producer
-	producer.StartPool(numWorkers, jobCh)
+	// call the producer and pass out wg so main can wait on it
+	wg := producer.StartPool(numWorkers, jobCh)
 
 	go func() {
-		ticker := time.NewTicker(5 * time.Millisecond)
+		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
 
 		for range ticker.C {
 
+			if len(jobCh) > cap(jobCh)/2 {
+				continue
+			}
 			jobs, err := jobRepo.FetchPending()
 			if err != nil {
 				fmt.Println(err)
 				continue
 			}
 
+		
 			for _, j := range jobs {
-				if len(jobs) == 0 {
-					fmt.Println("NO pending jobs")
-				}
 				jobCh <- j
 			}
 
 		}
 	}()
-	
+
 	mux := http.NewServeMux()
 
 	// jobs
@@ -77,5 +86,29 @@ func main() {
 
 	fmt.Println("SERVER RUNNING ON localhost:8000")
 
-	http.ListenAndServe(":8000", mux)
+	// http server in a gouroutine for graceful shutdown
+	srv := &http.Server{Addr: ":8000", Handler: mux}
+	go func() {
+		fmt.Println("SERVER RUNNING ON PORT 8000")
+		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+			log.Fatal(err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
+	<- quit
+
+	fmt.Println("shutting down...")
+
+	// stop accepting http requests
+	ctx, cancel := context.WithTimeout(context.Background(), 30 * time.Second)
+	defer cancel()
+	srv.Shutdown(ctx)
+
+	// close chanels - stop workers - wait for in-flight jobs to finish
+	close(jobCh)
+	wg.Wait()
+
+	fmt.Println("All workers done exiting")
 }

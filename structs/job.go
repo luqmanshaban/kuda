@@ -24,6 +24,7 @@ type Job struct {
    Retries int `json:"retries"`
    MaxRetries int `json:"max_retries"`
    RunsAt time.Time `json:"runs_at"`
+   WebhookURL string `json:"webhook_url"`
    CreatedAt time.Time `json:"created_at"`
    UpdatedAt time.Time `json:"updated_at"`
 }
