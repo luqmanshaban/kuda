@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -30,13 +30,13 @@ func (h *UserHandler) CreateUH(w http.ResponseWriter, r *http.Request) {
 	payload.Password = pass
 
 	if err != nil {
-		fmt.Println(err)
+		slog.Error("user creation failed", "component", "utils", "op", "password_hashing", "error", err)
 		utils.WriteJson(w, http.StatusInternalServerError, map[string]string{"message": "Failed to create user"})
 		return
 	}
 	u, err := h.Repo.CreateUser(payload.Email, payload.Password)
 	if err != nil {
-		fmt.Println(err)
+		slog.Error("user creation failed", "component", "repository", "op", "create_user", "error", err)
 		utils.WriteJson(w, http.StatusInternalServerError, map[string]string{"message": "Failed to create user"})
 		return
 	}
@@ -58,14 +58,14 @@ func (h *UserHandler) GetUserJH(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// CHECK if query filters are passed
-	statuses := []string{"pending", "running", "completed", "failed"}
+	statuses := []string{"pending", "running", "completed", "failed", "dead"}
 	param := r.URL.Query().Get("status")
 	for _, status := range statuses {
 		if param == status {
 			j, err := h.Repo.GetFilteredUserJobs(id, status)
-			fmt.Println("jobs length: ", len(j))
+		
 			if err != nil {
-				fmt.Println(err)
+				slog.Error("job filtration failed", "component", "repository", "op", "filter_user_jobs", "error", err)
 				utils.WriteJson(w, http.StatusInternalServerError, map[string]string{"message": "Failed to fetch for job"})
 				return
 			}
@@ -76,7 +76,7 @@ func (h *UserHandler) GetUserJH(w http.ResponseWriter, r *http.Request) {
 
 	j, err := h.Repo.GetUserJobs(id)
 	if err != nil {
-		fmt.Println(err)
+		slog.Error("user fetching failed", "component", "repository", "op", "fetch_user", "error", err)
 		utils.WriteJson(w, http.StatusInternalServerError, map[string]string{"message": "Failed to fetch for job"})
 		return
 	}

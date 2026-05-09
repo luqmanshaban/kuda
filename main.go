@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -28,6 +29,12 @@ func main() {
 	db.SetMaxIdleConns(10)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
+	// slog definitions
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
 	// initialize repository
 	jobRepo := &repository.JobRepository{DB: db}
 	userRepo := &repository.UserRepository{DB: db}
@@ -48,26 +55,36 @@ func main() {
 	// call the producer and pass out wg so main can wait on it
 	wg := producer.StartPool(numWorkers, jobCh)
 
+	// create a context for the poll
+	pollContext, CancelPoll := context.WithCancel(context.Background())
+
+	// check for staled jobs and reset them
+	err := jobRepo.ResetStaleJobs()
+	if err != nil {
+		log.Fatal("failed to reset stale jobs:", err)
+	}
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
 
-		for range ticker.C {
+		for {
+			select {
+			case <-pollContext.Done():
+				return
+			case <-ticker.C:
+				if len(jobCh) > cap(jobCh)/2 {
+					continue
+				}
+				jobs, err := jobRepo.FetchPending()
+				if err != nil {
+					slog.Error("fetch pending jobs failed", "component", "repository", "op", "fetch_pending", "error", err)
+					continue
+				}
 
-			if len(jobCh) > cap(jobCh)/2 {
-				continue
+				for _, j := range jobs {
+					jobCh <- j
+				}
 			}
-			jobs, err := jobRepo.FetchPending()
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
-
-		
-			for _, j := range jobs {
-				jobCh <- j
-			}
-
 		}
 	}()
 
@@ -84,7 +101,6 @@ func main() {
 	// queues
 	mux.HandleFunc("POST /queues", queueHandler.CreateQH)
 
-	fmt.Println("SERVER RUNNING ON localhost:8000")
 
 	// http server in a gouroutine for graceful shutdown
 	srv := &http.Server{Addr: ":8000", Handler: mux}
@@ -97,12 +113,14 @@ func main() {
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
-	<- quit
+	<-quit
+
+	CancelPoll()
 
 	fmt.Println("shutting down...")
 
 	// stop accepting http requests
-	ctx, cancel := context.WithTimeout(context.Background(), 30 * time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	srv.Shutdown(ctx)
 

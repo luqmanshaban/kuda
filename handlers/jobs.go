@@ -3,8 +3,8 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -52,7 +52,7 @@ func (h *JobHandler) CreateJH(w http.ResponseWriter, r *http.Request) {
 
 	jobs, err := h.Repo.CreateJob(incomingJobs)
 	if err != nil {
-		fmt.Println(err)
+		slog.Error("job creation failed", "component", "repository", "op", "create_job", "error", err)
 		utils.WriteJson(w, http.StatusInternalServerError, map[string]string{"message": "Failed to create job"})
 		return
 	}
@@ -76,7 +76,7 @@ func (h *JobHandler) GetJH(w http.ResponseWriter, r *http.Request) {
 
 	j, err := h.Repo.GetJob(job_id)
 	if err != nil {
-		fmt.Println(err)
+		slog.Error("job fetching failed", "component", "repository", "op", "fetch_job", "error", err)
 		utils.WriteJson(w, http.StatusInternalServerError, map[string]string{"message": "Failed to fetch for job"})
 		return
 	}

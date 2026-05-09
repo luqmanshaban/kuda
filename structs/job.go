@@ -12,6 +12,7 @@ const (
 	StateRunning JobState = "running"
 	StateCompleted JobState = "completed"
 	StateFailed JobState = "failed"
+	StateDead JobState = "dead"
 )
 
 

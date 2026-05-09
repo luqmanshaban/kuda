@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -187,4 +188,51 @@ func (r *JobRepository) UpdateJobState(id int, state string) (structs.Job, error
 	)
 
 	return j, nil
+}
+
+// exponential backoff with jitter 
+func (r *JobRepository) RetryJob(id int, retries int) error {
+
+	backoff := time.Duration(10 << retries) * time.Second
+	jitter := time.Duration(rand.Intn(5)) * time.Second
+
+	nextRunAt := time.Now().Add(backoff + jitter)
+
+	_,err := r.DB.Exec(`
+		UPDATE jobs
+		SET state='pending',
+		retries = retries + 1,
+		runs_at = $1,
+		updated_at = NOW()
+		where id = $2
+		`, nextRunAt, id)
+	if err != nil {
+		return err
+	}
+	return  nil
+}
+
+func (r *JobRepository) DeadJob(id int) error {
+	_, err := r.DB.Exec(`
+		UPDATE jobs 
+		SET state = 'dead',
+		updated_at = NOW()
+		WHERE id = $1
+		`, id)
+	if err != nil {
+		return err 
+	}
+	return  nil
+}
+
+func (r *JobRepository) ResetStaleJobs() error {
+
+	_,err := r.DB.Exec(`
+		UPDATE jobs
+		SET state = 'pending',
+		runs_at = NOW(),
+		updated_at = NOW()
+		WHERE state = 'running'
+		`)
+    return err
 }

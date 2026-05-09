@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/luqmanshaban/kuda/repository"
@@ -33,7 +33,7 @@ func (h *QueueHandler) CreateQH(w http.ResponseWriter, r *http.Request) {
 
 	q, err := h.Repo.CreateQueue(payload.Name, payload.UserID, payload.WebhookUrl)
 	if err != nil {
-		fmt.Println(err)
+		slog.Error("queue creation failed", "component", "repository", "op", "create_queue", "error", err)
 		utils.WriteJson(w, http.StatusInternalServerError, map[string]string{"message": "failed to create queue"})
 		return
 	}
