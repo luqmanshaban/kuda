@@ -4,17 +4,19 @@ import (
 	"database/sql"
 	"log"
 	"os"
+	"time"
 
 	"github.com/lib/pq"
 )
 
 func ConnectToDB() *sql.DB {
 	cfg := pq.Config{
-		Host: os.Getenv("DB_HOST"),
-		Port: 5432,
+		Host:     os.Getenv("DB_HOST"),
+		Port:     5432,
 		Database: os.Getenv("DB_NAME"),
-		User: os.Getenv("DB_USER"),
+		User:     os.Getenv("DB_USER"),
 		Password: os.Getenv("DB_PASS"),
+		SSLMode: "disable",
 	}
 
 	c, err := pq.NewConnectorConfig(cfg)
@@ -22,13 +24,19 @@ func ConnectToDB() *sql.DB {
 		panic(err)
 	}
 
-	db = sql.OpenDB(c)
+	// var err error
 
-	err = db.Ping(); 
-	if err != nil {
-		panic(err)
+	for i := range 10 {
+		db = sql.OpenDB(c)
+
+		err = db.Ping()
+		if err == nil {
+			log.Println("Database connected")
+			return db
+		}
+		log.Printf("Attempt %d/10 failed: %v\n", i+1, err)
+		time.Sleep(2 * time.Second)
 	}
-	log.Println("Database connected")
 
-	return db
+	panic("Could not connect to database after 10 attempts")
 }

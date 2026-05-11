@@ -1,7 +1,8 @@
 CREATE TABLE IF NOT EXISTS users(
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     email TEXT NOT NULL,
-    password TEXT NOT NULL
+    password TEXT NOT NULL,
+    api_key TEXT NOT NULL UNIQUE
 );
 
 CREATE TABLE IF NOT EXISTS jobs(
@@ -22,11 +23,4 @@ CREATE TABLE IF NOT EXISTS queues(
     name TEXT NOT NULL UNIQUE,
     user_id BIGINT REFERENCES users(id),
     webhook_url TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS api_keys(
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, 
-    key TEXT NOT NULL, 
-    user_id BIGINT REFERENCES users(id),
-    created_at TIMESTAMP NOT NULL default NOW()
 );

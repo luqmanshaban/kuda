@@ -10,9 +10,9 @@ type UserRepository struct {
 	DB *sql.DB
 }
 
-func (r *UserRepository) CreateUser(email string, password string) (structs.User, error)  {
+func (r *UserRepository) CreateUser(email, password, api_key string) (structs.User, error)  {
 	var nu structs.User 
-	err := r.DB.QueryRow("INSERT INTO users (email, password) VALUES ($1, $2) RETURNING id, email", email, password).Scan(&nu.ID, &nu.Email )
+	err := r.DB.QueryRow("INSERT INTO users (email, password, api_key) VALUES ($1, $2, $3) RETURNING id, email, api_key", email, password, api_key).Scan(&nu.ID, &nu.Email, &nu.ApiKey )
 	if err != nil {
 		return  structs.User{}, err 
 	}
@@ -89,4 +89,18 @@ func (r *UserRepository) GetFilteredUserJobs(userId int, filter string) ([]struc
 	}
 
 	return j, nil
+}
+
+func (r *UserRepository) GetUserWithApi(key string) (structs.User, error) {
+	var u structs.User 
+	err := r.DB.QueryRow("SELECT id, email FROM users WHERE api_key = $1 ", key).Scan(
+		&u.ID,
+		&u.Email,
+	)
+
+	if err != nil {
+		return structs.User{}, err 
+	}
+
+	return  u, nil
 }

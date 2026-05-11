@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luqmanshaban/kuda/metrics"
 	"github.com/luqmanshaban/kuda/repository"
 	"github.com/luqmanshaban/kuda/structs"
 )
@@ -20,9 +21,16 @@ type JobWorker struct {
 func (w JobWorker) Worker(worker int, jch <-chan structs.Job, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for j := range jch {
+		start := time.Now()
 		err := w.Deliver(j)
+		duration := time.Since(start).Seconds()
+		// prometheus data insertion
+		metrics.JobDeliveryDuration.Observe(duration)
+
+		
 		if err != nil {
 			slog.Error("job delivery failed", "component", "worker", "op", "deliver_job", "job_id", j.ID, "error", err)
+			metrics.JobsFailed.Inc()
 
 			if j.Retries >= j.MaxRetries {
 				if err := w.Repo.DeadJob(j.ID); err != nil {
@@ -42,6 +50,7 @@ func (w JobWorker) Worker(worker int, jch <-chan structs.Job, wg *sync.WaitGroup
 			if err != nil {
 				slog.Error("failed to mark job completed", "component", "worker", "op", "update_state", "job_id", j.ID, "error", err)
 			} else {
+				metrics.JobsCompleted.Inc()
 				slog.Info("job completed", "component", "worker", "job_id", j.ID, "worker_id", worker)
 			}
 		}

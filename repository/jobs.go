@@ -23,7 +23,7 @@ type JobRequest struct {
 	QueueName string          `json:"queue_name"`
 }
 
-func (r *JobRepository) CreateJob(jobs []JobRequest) ([]structs.Job, error) {
+func (r *JobRepository) CreateJob(jobs []JobRequest, user_id int) ([]structs.Job, error) {
 
 	var nj []structs.Job
 
@@ -33,7 +33,7 @@ func (r *JobRepository) CreateJob(jobs []JobRequest) ([]structs.Job, error) {
 
 	for i, job := range jobs {
 		q += fmt.Sprintf("($%d, $%d, $%d, $%d),", i*4+1, i*4+2, i*4+3, i*4+4)
-		args = append(args, job.Payload, job.RunsAt, job.UserID, job.QueueName)
+		args = append(args, job.Payload, job.RunsAt, user_id, job.QueueName)
 	}
 
 	q = strings.TrimSuffix(q, ",")
@@ -70,14 +70,15 @@ func (r *JobRepository) CreateJob(jobs []JobRequest) ([]structs.Job, error) {
 	return nj, nil
 }
 
-func (r *JobRepository) GetJob(id int) (structs.Job, error) {
+func (r *JobRepository) GetJob(id, user_id int) (structs.Job, error) {
 	var j structs.Job
 
 	err := r.DB.QueryRow(
 		`
 			SELECT id, payload, queue_name, user_id, state, retries, max_retries, runs_at, created_at, updated_at
 			FROM jobs
-			WHERE id = $1`, id).Scan(
+			WHERE id = $1
+			AND user_id = $2`, id, user_id).Scan(
 		&j.ID,
 		&j.Payload,
 		&j.QueueName,

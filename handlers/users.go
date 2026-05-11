@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"strconv"
 
 	"github.com/luqmanshaban/kuda/repository"
+	"github.com/luqmanshaban/kuda/structs"
 	"github.com/luqmanshaban/kuda/utils"
 )
 
@@ -34,7 +34,9 @@ func (h *UserHandler) CreateUH(w http.ResponseWriter, r *http.Request) {
 		utils.WriteJson(w, http.StatusInternalServerError, map[string]string{"message": "Failed to create user"})
 		return
 	}
-	u, err := h.Repo.CreateUser(payload.Email, payload.Password)
+
+	api_key := utils.GenerateAPIKey()
+	u, err := h.Repo.CreateUser(payload.Email, payload.Password, api_key)
 	if err != nil {
 		slog.Error("user creation failed", "component", "repository", "op", "create_user", "error", err)
 		utils.WriteJson(w, http.StatusInternalServerError, map[string]string{"message": "Failed to create user"})
@@ -45,17 +47,9 @@ func (h *UserHandler) CreateUH(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *UserHandler) GetUserJH(w http.ResponseWriter, r *http.Request) {
-	userId := r.PathValue("user_id")
-	if userId == "" {
-		utils.WriteJson(w, http.StatusBadRequest, map[string]string{"message": "job id not provided"})
-		return
-	}
 
-	id, err := strconv.Atoi(userId)
-	if err != nil {
-		utils.WriteJson(w, http.StatusBadRequest, map[string]string{"message": "job id format is invalid"})
-		return
-	}
+	user := r.Context().Value("user").(structs.User)
+	id := user.ID
 
 	// CHECK if query filters are passed
 	statuses := []string{"pending", "running", "completed", "failed", "dead"}
@@ -63,7 +57,7 @@ func (h *UserHandler) GetUserJH(w http.ResponseWriter, r *http.Request) {
 	for _, status := range statuses {
 		if param == status {
 			j, err := h.Repo.GetFilteredUserJobs(id, status)
-		
+
 			if err != nil {
 				slog.Error("job filtration failed", "component", "repository", "op", "filter_user_jobs", "error", err)
 				utils.WriteJson(w, http.StatusInternalServerError, map[string]string{"message": "Failed to fetch for job"})
@@ -82,4 +76,14 @@ func (h *UserHandler) GetUserJH(w http.ResponseWriter, r *http.Request) {
 	}
 
 	utils.WriteJson(w, http.StatusOK, j)
+}
+
+func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
+	user := r.Context().Value("user").(structs.User)
+	if user.Email == "" || user.ID == 0 {
+		utils.WriteJson(w, http.StatusUnauthorized, map[string]string{"message": "UNAUTHAURIZED"})
+		return
+	}
+
+	utils.WriteJson(w, http.StatusOK, map[string]any{"id": user.ID, "email": user.Email})
 }

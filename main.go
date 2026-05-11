@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"log/slog"
@@ -14,15 +15,18 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/luqmanshaban/kuda/handlers"
+	"github.com/luqmanshaban/kuda/metrics"
+	"github.com/luqmanshaban/kuda/middleware"
 	"github.com/luqmanshaban/kuda/repository"
 	"github.com/luqmanshaban/kuda/structs"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 var db *sql.DB
 
 func main() {
 	if err := godotenv.Load(); err != nil {
-		panic(err)
+		log.Println(err)
 	}
 	db = ConnectToDB()
 	db.SetMaxOpenConns(25)
@@ -39,6 +43,7 @@ func main() {
 	jobRepo := &repository.JobRepository{DB: db}
 	userRepo := &repository.UserRepository{DB: db}
 	queueRepo := &repository.QueueRepo{DB: db}
+	authMid := middleware.NewAuthMiddleware(userRepo)
 	// initialize handlers
 	jobHandler := &handlers.JobHandler{Repo: jobRepo}
 	userHandler := &handlers.UserHandler{Repo: userRepo}
@@ -90,16 +95,35 @@ func main() {
 
 	mux := http.NewServeMux()
 
+	// Initialize prometheus
+	metrics.Init()
+	mux.Handle("GET /metrics", promhttp.Handler())
 	// jobs
-	mux.HandleFunc("POST /jobs", jobHandler.CreateJH)
-	mux.HandleFunc("GET /jobs/{job_id}", jobHandler.GetJH)
+	mux.Handle("POST /jobs", authMid.Authenticate(http.HandlerFunc(jobHandler.CreateJH)))
+	mux.Handle("GET /jobs/{job_id}",  authMid.Authenticate(http.HandlerFunc(jobHandler.GetJH)))
 
 	// users
 	mux.HandleFunc("POST /users", userHandler.CreateUH)
-	mux.HandleFunc("GET /users/jobs/{user_id}", userHandler.GetUserJH)
+	mux.Handle("GET /users/jobs", authMid.Authenticate(http.HandlerFunc(userHandler.GetUserJH)))
+	mux.Handle("GET /users/me", authMid.Authenticate(http.HandlerFunc(userHandler.GetUser)))
 
 	// queues
-	mux.HandleFunc("POST /queues", queueHandler.CreateQH)
+	mux.Handle("POST /queues", authMid.Authenticate(http.HandlerFunc(queueHandler.CreateQH)))
+	mux.Handle("GET /queues", authMid.Authenticate(http.HandlerFunc(queueHandler.GetQH)))
+	mux.Handle("PUT /queues/{queue_id}", authMid.Authenticate(http.HandlerFunc(queueHandler.UpdateQH)))
+
+	// health
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		if err := db.Ping(); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string {"status": "Unhealthy"})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string {"status": "healthy"})
+	})
 
 
 	// http server in a gouroutine for graceful shutdown
