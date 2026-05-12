@@ -15,11 +15,11 @@ import (
 
 	// "github.com/joho/godotenv"
 	"github.com/luqmanshaban/kuda/handlers"
-	"github.com/luqmanshaban/kuda/metrics"
+	// "github.com/luqmanshaban/kuda/metrics"
 	"github.com/luqmanshaban/kuda/middleware"
 	"github.com/luqmanshaban/kuda/repository"
 	"github.com/luqmanshaban/kuda/structs"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	// "github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 var db *sql.DB
@@ -81,13 +81,9 @@ func main() {
 					continue
 				}
 				jobs, err := jobRepo.FetchPending()
-				fmt.Println("--------------------------------------------")
-				fmt.Println("Jobs length: ", len(jobs))
-				fmt.Println("--------------------------------------------")
+
 				if err != nil {
-					fmt.Println("--------------------------------------------")
 					slog.Error("fetch pending jobs failed", "component", "repository", "op", "fetch_pending", "error", err)
-					fmt.Println("--------------------------------------------")
 					continue
 				}
 
@@ -101,8 +97,8 @@ func main() {
 	mux := http.NewServeMux()
 
 	// Initialize prometheus
-	metrics.Init()
-	mux.Handle("GET /metrics", promhttp.Handler())
+	// metrics.Init()
+	// mux.Handle("GET /metrics", promhttp.Handler())
 	// jobs
 	mux.Handle("POST /jobs", authMid.Authenticate(http.HandlerFunc(jobHandler.CreateJH)))
 	mux.Handle("GET /jobs/{job_id}", authMid.Authenticate(http.HandlerFunc(jobHandler.GetJH)))

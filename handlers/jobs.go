@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/luqmanshaban/kuda/metrics"
+	// "github.com/luqmanshaban/kuda/metrics"
 	"github.com/luqmanshaban/kuda/repository"
 	"github.com/luqmanshaban/kuda/structs"
 	"github.com/luqmanshaban/kuda/utils"
@@ -60,7 +60,7 @@ func (h *JobHandler) CreateJH(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// promethues job enque
-	metrics.JobsEnqueued.Add(float64(len(jobs)))
+	// metrics.JobsEnqueued.Add(float64(len(jobs)))
 
 	utils.WriteJson(w, http.StatusCreated, jobs)
 }
