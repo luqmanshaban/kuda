@@ -49,7 +49,7 @@ func (h *JobHandler) CreateJH(w http.ResponseWriter, r *http.Request) {
 
 	for i := range incomingJobs {
 		if incomingJobs[i].RunsAt.IsZero() {
-			incomingJobs[i].RunsAt = time.Now()
+			incomingJobs[i].RunsAt = time.Now().UTC()
 		}
 	}
 

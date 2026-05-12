@@ -13,9 +13,9 @@ CREATE TABLE IF NOT EXISTS jobs(
     state TEXT NOT NULL default 'pending',
     retries INT NOT NULL default 0,
     max_retries INT NOT NULL default 3,
-    runs_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP NOT NULL default NOW(),
-    updated_at TIMESTAMP NOT NULL default NOW()
+    runs_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL default NOW(),
+    updated_at TIMESTAMPTZ NOT NULL default NOW()
 );
 
 CREATE TABLE IF NOT EXISTS queues(

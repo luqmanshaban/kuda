@@ -16,6 +16,10 @@ type QueueHandler struct {
 }
 
 func (h *QueueHandler) CreateQH(w http.ResponseWriter, r *http.Request) {
+	if r.Context().Value("user") == nil {
+		utils.WriteJson(w, http.StatusUnauthorized, map[string]string{"message": "UNAUTHORIZED"})
+		return
+	}
 	id := r.Context().Value("user").(structs.User).ID
 	var payload struct {
 		Name       string `json:"name"`

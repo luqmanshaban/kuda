@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/joho/godotenv"
+	// "github.com/joho/godotenv"
 	"github.com/luqmanshaban/kuda/handlers"
 	"github.com/luqmanshaban/kuda/metrics"
 	"github.com/luqmanshaban/kuda/middleware"
@@ -25,9 +25,9 @@ import (
 var db *sql.DB
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Println(err)
-	}
+	// if err := godotenv.Load(); err != nil {
+	// 	log.Println(err)
+	// }
 	db = ConnectToDB()
 	db.SetMaxOpenConns(25)
 	db.SetMaxIdleConns(10)
@@ -81,8 +81,13 @@ func main() {
 					continue
 				}
 				jobs, err := jobRepo.FetchPending()
+				fmt.Println("--------------------------------------------")
+				fmt.Println("Jobs length: ", len(jobs))
+				fmt.Println("--------------------------------------------")
 				if err != nil {
+					fmt.Println("--------------------------------------------")
 					slog.Error("fetch pending jobs failed", "component", "repository", "op", "fetch_pending", "error", err)
+					fmt.Println("--------------------------------------------")
 					continue
 				}
 
@@ -100,7 +105,7 @@ func main() {
 	mux.Handle("GET /metrics", promhttp.Handler())
 	// jobs
 	mux.Handle("POST /jobs", authMid.Authenticate(http.HandlerFunc(jobHandler.CreateJH)))
-	mux.Handle("GET /jobs/{job_id}",  authMid.Authenticate(http.HandlerFunc(jobHandler.GetJH)))
+	mux.Handle("GET /jobs/{job_id}", authMid.Authenticate(http.HandlerFunc(jobHandler.GetJH)))
 
 	// users
 	mux.HandleFunc("POST /users", userHandler.CreateUH)
@@ -117,14 +122,13 @@ func main() {
 		if err := db.Ping(); err != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string {"status": "Unhealthy"})
+			json.NewEncoder(w).Encode(map[string]string{"status": "Unhealthy"})
 			return
 		}
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string {"status": "healthy"})
+		json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
 	})
-
 
 	// http server in a gouroutine for graceful shutdown
 	srv := &http.Server{Addr: ":8000", Handler: mux}

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -63,6 +64,7 @@ func (h *UserHandler) GetUserJH(w http.ResponseWriter, r *http.Request) {
 				utils.WriteJson(w, http.StatusInternalServerError, map[string]string{"message": "Failed to fetch for job"})
 				return
 			}
+			fmt.Println(len(j))
 			utils.WriteJson(w, http.StatusOK, j)
 			return
 		}

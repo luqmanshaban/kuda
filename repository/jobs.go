@@ -197,7 +197,7 @@ func (r *JobRepository) RetryJob(id int, retries int) error {
 	backoff := time.Duration(10 << retries) * time.Second
 	jitter := time.Duration(rand.Intn(5)) * time.Second
 
-	nextRunAt := time.Now().Add(backoff + jitter)
+	nextRunAt := time.Now().UTC().Add(backoff + jitter)
 
 	_,err := r.DB.Exec(`
 		UPDATE jobs

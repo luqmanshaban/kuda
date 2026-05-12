@@ -21,7 +21,7 @@ type JobWorker struct {
 func (w JobWorker) Worker(worker int, jch <-chan structs.Job, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for j := range jch {
-		start := time.Now()
+		start := time.Now().UTC()
 		err := w.Deliver(j)
 		duration := time.Since(start).Seconds()
 		// prometheus data insertion
