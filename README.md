@@ -1,9 +1,7 @@
 # Kuda
 
-A lightweight, language-agnostic job queue service built in Go.
-Kuda lets any application schedule and deliver background jobs
-reliably over HTTP webhooks, without running any additional
-infrastructure beyond a Postgres database.
+Kuda is a self-hosted job queue for teams that already run Postgres and don't want to operate another piece of infrastructure.
+
 
 ## Why Kuda
 

@@ -1,10 +1,10 @@
-package structs
+package core
 
 import "time"
 
-type APIKEY struct {
+type APIKey struct {
 	ID int `json:"id"`
+	Name string `json:"name"`
 	Key string `json:"key"`
-	UserID string `json:"user_id"`
 	CreatedAt time.Time `json:"created_at"`
 }

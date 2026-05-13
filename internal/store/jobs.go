@@ -1,61 +1,58 @@
-package repository
+package store
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"math/rand"
 	"strings"
 	"time"
 
 	"github.com/lib/pq"
-	"github.com/luqmanshaban/kuda/structs"
+	"github.com/luqmanshaban/kuda/internal/core"
 )
 
-type JobRepository struct {
+
+type JobStore struct {
 	DB *sql.DB
 }
 
-type JobRequest struct {
-	Payload   json.RawMessage `json:"payload"`
-	RunsAt    time.Time       `json:"runs_at"`
-	UserID    int             `json:"user_id"`
-	QueueName string          `json:"queue_name"`
+func NewJobStore(db *sql.DB) *JobStore {
+	return &JobStore{DB: db}
 }
 
-func (r *JobRepository) CreateJob(jobs []JobRequest, user_id int) ([]structs.Job, error) {
 
-	var nj []structs.Job
+func (r *JobStore) CreateJob(jobs []core.JobRequest) ([]core.Job, error) {
+
+	var nj []core.Job
 
 	// build one query with all values
-	q := "INSERT INTO jobs (payload, runs_at, user_id, queue_name) VALUES "
+	q := "INSERT INTO jobs (payload, runs_at, queue_name) VALUES "
 	var args []any
 
 	for i, job := range jobs {
-		q += fmt.Sprintf("($%d, $%d, $%d, $%d),", i*4+1, i*4+2, i*4+3, i*4+4)
-		args = append(args, job.Payload, job.RunsAt, user_id, job.QueueName)
+		q += fmt.Sprintf("($%d, $%d, $%d),", i*3+1, i*3+2, i*3+3)
+		args = append(args, job.Payload, job.RunsAt, job.QueueName)
 	}
 
 	q = strings.TrimSuffix(q, ",")
 
-	q += " RETURNING id, payload, queue_name, user_id, state, retries, max_retries, runs_at, created_at, updated_at"
+	q += " RETURNING id, payload, queue_name, state, retries, max_retries, runs_at, created_at, updated_at"
 	
 
 	rows, err := r.DB.Query(q, args...)
 	if err != nil {
-		return []structs.Job{}, err
+		return []core.Job{}, err
 	}
 	defer rows.Close()
 
 
 	for rows.Next() {
-		var j structs.Job
+		var j core.Job
 
 		rows.Scan(
 			&j.ID,
 			&j.Payload,
 			&j.QueueName,
-			&j.UserID,
 			&j.State,
 			&j.Retries,
 			&j.MaxRetries,
@@ -70,19 +67,17 @@ func (r *JobRepository) CreateJob(jobs []JobRequest, user_id int) ([]structs.Job
 	return nj, nil
 }
 
-func (r *JobRepository) GetJob(id, user_id int) (structs.Job, error) {
-	var j structs.Job
+func (r *JobStore) GetJob(id int) (core.Job, error) {
+	var j core.Job
 
 	err := r.DB.QueryRow(
 		`
-			SELECT id, payload, queue_name, user_id, state, retries, max_retries, runs_at, created_at, updated_at
+			SELECT id, payload, queue_name, state, retries, max_retries, runs_at, created_at, updated_at
 			FROM jobs
-			WHERE id = $1
-			AND user_id = $2`, id, user_id).Scan(
+			WHERE id = $1`, id).Scan(
 		&j.ID,
 		&j.Payload,
 		&j.QueueName,
-		&j.UserID,
 		&j.State,
 		&j.Retries,
 		&j.MaxRetries,
@@ -92,14 +87,81 @@ func (r *JobRepository) GetJob(id, user_id int) (structs.Job, error) {
 	)
 
 	if err != nil {
-		return structs.Job{}, err
+		return core.Job{}, err
+	}
+
+	return j, nil
+}
+
+func (r *JobStore) GetJobs() ([]core.Job, error) {
+	var j []core.Job
+
+	rows, err := r.DB.Query(
+		`
+			SELECT id, payload, queue_name, state, retries, max_retries, runs_at, created_at, updated_at
+			FROM jobs
+			`,)
+
+	if err != nil {
+		return []core.Job{}, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var job core.Job 
+		rows.Scan(
+			&job.ID,
+			&job.Payload,
+			&job.QueueName,
+			&job.State,
+			&job.Retries,
+			&job.MaxRetries,
+			&job.RunsAt,
+			&job.CreatedAt,
+			&job.UpdatedAt,
+		)
+		j = append(j, job)
+	}
+
+	return j, nil
+}
+
+func (r *JobStore) GetFilteredJobs(filter string) ([]core.Job, error) {
+	var j []core.Job
+
+	rows, err := r.DB.Query(
+		`
+			SELECT id, payload, queue_name, state, retries, max_retries, runs_at, created_at, updated_at
+			FROM jobs
+			WHERE state = $1
+			`, filter)
+
+	if err != nil {
+		return []core.Job{}, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var job core.Job 
+		rows.Scan(
+			&job.ID,
+			&job.Payload,
+			&job.QueueName,
+			&job.State,
+			&job.Retries,
+			&job.MaxRetries,
+			&job.RunsAt,
+			&job.CreatedAt,
+			&job.UpdatedAt,
+		)
+		j = append(j, job)
 	}
 
 	return j, nil
 }
 
 // check for pending jobs
-func (r *JobRepository) FetchPending() ([]structs.Job, error) {
+func (r *JobStore) FetchPending() ([]core.Job, error) {
     tx, err := r.DB.Begin()
     if err != nil {
         return nil, err
@@ -108,7 +170,7 @@ func (r *JobRepository) FetchPending() ([]structs.Job, error) {
 
     rows, err := tx.Query(`
         SELECT 
-            j.id, j.payload, j.queue_name, j.user_id,
+            j.id, j.payload, j.queue_name,
             j.state, j.retries, j.max_retries, j.runs_at,
             j.created_at, j.updated_at,
             q.webhook_url
@@ -122,16 +184,15 @@ func (r *JobRepository) FetchPending() ([]structs.Job, error) {
         return nil, err
     }
 
-    var jobs []structs.Job
+    var jobs []core.Job
     var ids []int
 
     for rows.Next() {
-        var j structs.Job
+        var j core.Job
         if err := rows.Scan(
             &j.ID,
             &j.Payload,
             &j.QueueName,
-            &j.UserID,
             &j.State,
             &j.Retries,
             &j.MaxRetries,
@@ -168,18 +229,17 @@ func (r *JobRepository) FetchPending() ([]structs.Job, error) {
 }
 
 // update job status
-func (r *JobRepository) UpdateJobState(id int, state string) (structs.Job, error) {
-	var j structs.Job
-	_, err := r.DB.Exec("UPDATE jobs SET state = $1 WHERE id = $2 RETURNING id, payload, queue_name, user_id, state, retries, max_retries, runs_at, created_at, updated_at", state, id)
+func (r *JobStore) UpdateJobState(id int, state string) (core.Job, error) {
+	var j core.Job
+	_, err := r.DB.Exec("UPDATE jobs SET state = $1 WHERE id = $2 RETURNING id, payload, queue_name, state, retries, max_retries, runs_at, created_at, updated_at", state, id)
 	if err != nil {
-		return structs.Job{}, err
+		return core.Job{}, err
 	}
 
-	err = r.DB.QueryRow("SELECT id, payload, queue_name, user_id, state, retries, max_retries, runs_at, created_at, updated_at FROM jobs WHERE id = $1", id).Scan(
+	err = r.DB.QueryRow("SELECT id, payload, queue_name, state, retries, max_retries, runs_at, created_at, updated_at FROM jobs WHERE id = $1", id).Scan(
 		&j.ID,
 		&j.Payload,
 		&j.QueueName,
-		&j.UserID,
 		&j.State,
 		&j.Retries,
 		&j.MaxRetries,
@@ -192,7 +252,7 @@ func (r *JobRepository) UpdateJobState(id int, state string) (structs.Job, error
 }
 
 // exponential backoff with jitter 
-func (r *JobRepository) RetryJob(id int, retries int) error {
+func (r *JobStore) RetryJob(id int, retries int) error {
 
 	backoff := time.Duration(10 << retries) * time.Second
 	jitter := time.Duration(rand.Intn(5)) * time.Second
@@ -213,7 +273,7 @@ func (r *JobRepository) RetryJob(id int, retries int) error {
 	return  nil
 }
 
-func (r *JobRepository) DeadJob(id int) error {
+func (r *JobStore) DeadJob(id int) error {
 	_, err := r.DB.Exec(`
 		UPDATE jobs 
 		SET state = 'dead',
@@ -226,7 +286,7 @@ func (r *JobRepository) DeadJob(id int) error {
 	return  nil
 }
 
-func (r *JobRepository) ResetStaleJobs() error {
+func (r *JobStore) ResetStaleJobs() error {
 
 	_,err := r.DB.Exec(`
 		UPDATE jobs

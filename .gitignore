@@ -29,3 +29,6 @@ Thumbs.db
 # Temporary/Log files
 tmp/
 *.log
+
+# Personal development notes
+notes/

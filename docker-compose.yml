@@ -2,9 +2,9 @@ services:
   db:
     image: postgres:16
     environment:
-      POSTGRES_USER: luqman
-      POSTGRES_PASSWORD: Luqman123.
-      POSTGRES_DB: kuda
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     ports:
       - "5433:5432"
     volumes:
@@ -17,9 +17,10 @@ services:
       - "8000:8000"
     environment:
       DB_HOST: db
-      DB_NAME: kuda
-      DB_USER: luqman
-      DB_PASS: Luqman123.
+      DB_NAME: ${DB_NAME}
+      DB_USER:  ${DB_USER}
+      DB_PASSWORD:  ${DB_PASSWORD}
+      KUDA_API_KEY:  ${KUDA_API_KEY}
     depends_on:
       - db
 

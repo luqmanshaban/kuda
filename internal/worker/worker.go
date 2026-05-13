@@ -1,4 +1,4 @@
-package main
+package worker
 
 import (
 	"bytes"
@@ -9,16 +9,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luqmanshaban/kuda/internal/core"
+	"github.com/luqmanshaban/kuda/internal/store"
 	// "github.com/luqmanshaban/kuda/metrics"
-	"github.com/luqmanshaban/kuda/repository"
-	"github.com/luqmanshaban/kuda/structs"
 )
 
-type JobWorker struct {
-	Repo *repository.JobRepository
+type Worker struct {
+	Store *store.JobStore
 }
 
-func (w JobWorker) Worker(worker int, jch <-chan structs.Job, wg *sync.WaitGroup) {
+func (w Worker) Worker(worker int, jch <-chan core.Job, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for j := range jch {
 		// start := time.Now().UTC()
@@ -33,20 +33,20 @@ func (w JobWorker) Worker(worker int, jch <-chan structs.Job, wg *sync.WaitGroup
 			// metrics.JobsFailed.Inc()
 
 			if j.Retries >= j.MaxRetries {
-				if err := w.Repo.DeadJob(j.ID); err != nil {
+				if err := w.Store.DeadJob(j.ID); err != nil {
 					slog.Error("failed to mark job dead", "component", "worker", "op", "dead_job", "job_id", j.ID, "error", err)
 				} else {
 					slog.Warn("job dead", "component", "worker", "job_id", j.ID, "attempts", j.Retries+1)
 				}
 			} else {
-				if err := w.Repo.RetryJob(j.ID, j.Retries); err != nil {
+				if err := w.Store.RetryJob(j.ID, j.Retries); err != nil {
 					slog.Error("failed to schedule retry", "component", "worker", "op", "retry_job", "job_id", j.ID, "error", err)
 				} else {
 					slog.Info("job scheduled for retry", "component", "worker", "job_id", j.ID, "attempt", j.Retries+1, "max", j.MaxRetries)
 				}
 			}
 		} else {
-			_, err := w.Repo.UpdateJobState(j.ID, "completed")
+			_, err := w.Store.UpdateJobState(j.ID, "completed")
 			if err != nil {
 				slog.Error("failed to mark job completed", "component", "worker", "op", "update_state", "job_id", j.ID, "error", err)
 			} else {
@@ -57,7 +57,7 @@ func (w JobWorker) Worker(worker int, jch <-chan structs.Job, wg *sync.WaitGroup
 	}
 }
 
-func (w JobWorker) Deliver(job structs.Job) error {
+func (w Worker) Deliver(job core.Job) error {
 	body, err := json.Marshal(map[string]any{
 		"job_id":  job.ID,
 		"payload": job.Payload,
