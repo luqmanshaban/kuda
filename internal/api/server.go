@@ -31,9 +31,11 @@ func NewServer(cfg *config.Config, js *store.JobStore, qs *store.QueueStore) *Se
 	mux.Handle("POST /jobs", auth(http.HandlerFunc(jobHandler.CreateJH)))
 	mux.Handle("GET /jobs", auth(http.HandlerFunc(jobHandler.GetJobsH)))
 	mux.Handle("GET /jobs/{job_id}", auth(http.HandlerFunc(jobHandler.GetSingleJobH)))
+	mux.Handle("GET /jobs/batch/{batch_id}", auth(http.HandlerFunc(jobHandler.GetJobsBatchH)))
 
 	// queues routes
 	mux.Handle("POST /queues", auth(http.HandlerFunc(queueHandler.CreateQH)))
+	mux.Handle("GET /queues/{name}", auth(http.HandlerFunc(queueHandler.GetSingleQH)))
 	mux.Handle("GET /queues", auth(http.HandlerFunc(queueHandler.GetQH)))
 	mux.Handle("PUT /queues", auth(http.HandlerFunc(queueHandler.UpdateQH)))
 

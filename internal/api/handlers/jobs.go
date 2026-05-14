@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -39,20 +40,35 @@ func (h *JobHandler) CreateJH(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		var singleRequest core.JobRequest
-		if err := json.Unmarshal(trimmedBody, &singleRequest); err != nil {
+		if err := json.Unmarshal(body, &singleRequest); err != nil {
+			fmt.Printf("JSON Decode Error: %v\n", err)
 			WriteJson(w, http.StatusBadRequest, map[string]string{"message": "invalid body"})
 			return
 		}
-		incomingJobs = append(incomingJobs, singleRequest)
+		if singleRequest.RunsAt.IsZero() {
+			singleRequest.RunsAt = time.Now().UTC()
+		}
+
+		job_id, err := h.Store.CreateSingleJob(singleRequest)
+		if err != nil {
+			slog.Error("job creation failed", "error", err)
+			WriteJson(w, http.StatusInternalServerError, map[string]string{"message": "failed to create job"})
+			return
+		}
+		WriteJson(w, http.StatusCreated, map[string]int{"job_id": job_id})
+		return
 	}
 
+	batch_id := GenerateBatchId()
 	for i := range incomingJobs {
 		if incomingJobs[i].RunsAt.IsZero() {
 			incomingJobs[i].RunsAt = time.Now().UTC()
 		}
+		
+		incomingJobs[i].BatchID = batch_id
 	}
 
-	jobs, err := h.Store.CreateJob(incomingJobs)
+	count, err := h.Store.CreateJobs(incomingJobs)
 	if err != nil {
 		slog.Error("job creation failed", "component", "repository", "op", "create_job", "error", err)
 		WriteJson(w, http.StatusInternalServerError, map[string]string{"message": "Failed to create job"})
@@ -61,7 +77,7 @@ func (h *JobHandler) CreateJH(w http.ResponseWriter, r *http.Request) {
 	// promethues job enque
 	// metrics.JobsEnqueued.Add(float64(len(jobs)))
 
-	WriteJson(w, http.StatusCreated, jobs)
+	WriteJson(w, http.StatusCreated, map[string]any{"batch_id": batch_id, "count": count})
 }
 
 func (h *JobHandler) GetSingleJobH(w http.ResponseWriter, r *http.Request) {
@@ -87,13 +103,14 @@ func (h *JobHandler) GetSingleJobH(w http.ResponseWriter, r *http.Request) {
 	WriteJson(w, http.StatusOK, j)
 }
 
+
 func (h *JobHandler) GetJobsH(w http.ResponseWriter, r *http.Request) {
 	// CHECK if query filters are passed
 	statuses := []string{"pending", "running", "completed", "failed", "dead"}
 	param := r.URL.Query().Get("status")
 	for _, status := range statuses {
 		if param == status {
-			j, err := h.Store.GetFilteredJobs( status)
+			j, err := h.Store.GetFilteredJobs(status)
 
 			if err != nil {
 				slog.Error("job filtration failed", "component", "repository", "op", "filter_user_jobs", "error", err)
@@ -106,6 +123,23 @@ func (h *JobHandler) GetJobsH(w http.ResponseWriter, r *http.Request) {
 	}
 
 	js, err := h.Store.GetJobs()
+	if err != nil {
+		slog.Error("user fetching failed", "component", "repository", "op", "fetch_user", "error", err)
+		WriteJson(w, http.StatusInternalServerError, map[string]string{"message": "Failed to fetch for job"})
+		return
+	}
+
+	WriteJson(w, http.StatusOK, js)
+}
+
+func (h *JobHandler) GetJobsBatchH(w http.ResponseWriter, r *http.Request) {
+	batchId := r.PathValue("batch_id")
+	if batchId == "" {
+		WriteJson(w, http.StatusBadRequest, map[string]string{"message":"batch id required"})
+		return
+	}
+	
+	js, err := h.Store.GetJobsBatchId(batchId)
 	if err != nil {
 		slog.Error("user fetching failed", "component", "repository", "op", "fetch_user", "error", err)
 		WriteJson(w, http.StatusInternalServerError, map[string]string{"message": "Failed to fetch for job"})

@@ -41,6 +41,22 @@ func (h *QueueHandler) CreateQH(w http.ResponseWriter, r *http.Request) {
 	WriteJson(w, http.StatusCreated, q)
 }
 
+func (h *QueueHandler) GetSingleQH(w http.ResponseWriter, r *http.Request) {
+	queueName := r.PathValue("name")
+	if queueName == "" {
+		WriteJson(w, http.StatusBadRequest, map[string]string{"message":"queue name not provided in path"})
+		return
+	}
+
+	q, err := h.Store.GetQueue(queueName)
+	if err != nil {
+		slog.Error("queue fetching failed", "component", "repository", "op", "fetch_queue", "error", err)
+		WriteJson(w, http.StatusInternalServerError, map[string]string{"message": "failed to fetch queue"})
+		return
+	}
+	WriteJson(w, http.StatusOK, q)
+}
+
 func (h *QueueHandler) GetQH(w http.ResponseWriter, r *http.Request) {
 	
 

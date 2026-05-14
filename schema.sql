@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS queues(
 CREATE TABLE IF NOT EXISTS jobs(
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     queue_name TEXT NOT NULL REFERENCES queues(name),
+    batch_id TEXT,
     payload JSONB NOT NULL,
     state TEXT NOT NULL default 'pending',
     retries INT NOT NULL default 0,

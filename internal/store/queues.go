@@ -31,6 +31,22 @@ func (r *QueueStore) CreateQueue(name, webhook_url string) (core.Queue, error) {
 	return  q, nil
 }
 
+func (r *QueueStore) GetQueue(name string) (core.Queue, error) {
+	var q core.Queue
+
+	err := r.DB.QueryRow("SELECT id, name, webhook_url, created_at FROM queues WHERE name = $1", name).Scan(
+		&q.ID, 
+		&q.Name,
+		&q.WebhookUrl,
+		&q.CreatedAt,
+	)
+	if err != nil {
+		return  q, err
+	}
+
+	return q, nil
+}
+
 func (r *QueueStore) GetQueues() ([]core.Queue, error) {
 	var qs []core.Queue
 
