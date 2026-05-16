@@ -27,9 +27,9 @@ func (p *Producer) Start(context context.Context) {
 		case <-context.Done():
 			slog.Info("Shutting down")
 			return
-		case <- ticker.C:
-		    // Backpressure (if channel is more than half...wait)
-			if len(p.ch) >= cap(p.ch) / 2 {
+		case <-ticker.C:
+			// Backpressure (if channel is more than half...wait)
+			if len(p.ch) >= cap(p.ch)/2 {
 				continue
 			}
 
@@ -40,7 +40,11 @@ func (p *Producer) Start(context context.Context) {
 			}
 
 			for _, j := range jobs {
-				p.ch <- j
+				select {
+				case p.ch <- j:
+				case <-context.Done():
+					return
+				}
 			}
 		}
 	}

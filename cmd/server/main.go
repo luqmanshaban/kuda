@@ -31,11 +31,13 @@ func main() {
 	// 4. Stores 
 	jobStore := store.NewJobStore(db)
 	queueStore := store.NewQueueStore(db)
+	deadLetterStore := store.NewDeadLetter(db)
 
 	// 5. Stale jobs
 	err := jobStore.ResetStaleJobs()
 	if err != nil {
 		slog.Error("failed to reset stale jobs", "error", err)
+		panic(err)
 	}
 
 	// 6. worker pool
@@ -49,7 +51,7 @@ func main() {
 	go producer.Start(pollCtx)
 	
 	// 8. Http Server
-	srv := api.NewServer(cfg, jobStore, queueStore)
+	srv := api.NewServer(cfg, jobStore, queueStore, deadLetterStore)
 
 	go srv.Start()
 

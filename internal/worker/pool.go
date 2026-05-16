@@ -26,7 +26,7 @@ func (p *Pool) Start(jobCh <-chan core.Job) *sync.WaitGroup {
 		go func(id int) {
 			defer wg.Done()
 			for job := range jobCh {
-				p.process(w, i, job)
+				p.process(w, id, job)
 			}
 		}(i)
 	}
@@ -38,7 +38,7 @@ func (p *Pool) process(w *Worker, workerId int, j core.Job) {
 	if err != nil {
 		slog.Error("job delivery failed", "job_id", j.ID, "error", err)
 		if j.Retries >= j.MaxRetries {
-			p.store.DeadJob(j.ID)
+			p.store.DeadJob(j)
 		} else {
 			p.store.RetryJob(j.ID, j.Retries)
 		}

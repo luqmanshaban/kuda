@@ -16,12 +16,13 @@ type Server struct {
 	httpServer *http.Server
 }
 
-func NewServer(cfg *config.Config, js *store.JobStore, qs *store.QueueStore) *Server {
+func NewServer(cfg *config.Config, js *store.JobStore, qs *store.QueueStore, dl *store.DeadLetterJobStore) *Server {
 	mux := http.NewServeMux()
 
 	// initializing the handlers
 	jobHandler := &handlers.JobHandler{Store: js}
 	queueHandler := &handlers.QueueHandler{Store: qs}
+	dljHandler := &handlers.DeadLetterHandler{Store: dl}
 
 	// api key initialization
 	apiKey := middleware.InitAPIKey()
@@ -32,6 +33,9 @@ func NewServer(cfg *config.Config, js *store.JobStore, qs *store.QueueStore) *Se
 	mux.Handle("GET /jobs", auth(http.HandlerFunc(jobHandler.GetJobsH)))
 	mux.Handle("GET /jobs/{job_id}", auth(http.HandlerFunc(jobHandler.GetSingleJobH)))
 	mux.Handle("GET /jobs/batch/{batch_id}", auth(http.HandlerFunc(jobHandler.GetJobsBatchH)))
+
+	// dead letters 
+	mux.Handle("GET /dead-letter-jobs", auth(http.HandlerFunc(dljHandler.GetDeadJobs)))
 
 	// queues routes
 	mux.Handle("POST /queues", auth(http.HandlerFunc(queueHandler.CreateQH)))

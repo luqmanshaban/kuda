@@ -20,6 +20,10 @@ func Connect(cfg *config.Config) *sql.DB {
 		panic(err)
 	}
 
+	db.SetMaxOpenConns(100)
+	db.SetConnMaxIdleTime(25)
+	db.SetConnMaxLifetime(5 * time.Minute)
+
 	for i := range 10 {
 		if err = db.Ping(); err == nil {
 			slog.Info("Database connected")

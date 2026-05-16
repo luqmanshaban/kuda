@@ -24,3 +24,12 @@ CREATE TABLE IF NOT EXISTS jobs(
     created_at TIMESTAMPTZ NOT NULL default NOW(),
     updated_at TIMESTAMPTZ NOT NULL default NOW()
 );
+
+CREATE TABLE IF NOT EXISTS dead_letter_jobs (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    queue_name TEXT NOT NULL,
+    batch_id TEXT,
+    payload JSONB NOT NULL,
+    error_reason TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

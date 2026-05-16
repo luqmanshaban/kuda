@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -20,48 +21,116 @@ func NewJobStore(db *sql.DB) *JobStore {
 }
 
 func (r *JobStore) CreateJobs(jobs []core.JobRequest) (int64, error) {
-
-	// build one query with all values
-	q := "INSERT INTO jobs (payload, runs_at, queue_name, batch_id) VALUES "
-	var args []any
-
-	for i, job := range jobs {
-		q += fmt.Sprintf("($%d, $%d, $%d, $%d),", i*4+1, i*4+2, i*4+3, i*4+4)
-		args = append(args, job.Payload, job.RunsAt, job.QueueName, job.BatchID)
+	if len(jobs) == 0 {
+		return 0, nil
 	}
 
-	q = strings.TrimSuffix(q, ",")
-
-	// q += " RETURNING id, payload, queue_name, state, retries, max_retries, runs_at, created_at, updated_at"
-
-	rows, err := r.DB.Exec(q, args...)
+	// fetch for existing queues
+	rows, err := r.DB.Query("SELECT name FROM queues")
 	if err != nil {
 		return 0, err
 	}
-	count, err := rows.RowsAffected()
-	if err != nil {
-		return 0, err
+	defer rows.Close()
+	var validQueues = make(map[string]bool)
+
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return 0, err
+		}
+		validQueues[name] = true
 	}
-	return count, nil
+
+	// seperating healthy jobs from dead jobs
+	var healthyJobs []core.JobRequest
+	var deadJobs []core.JobRequest
+
+	for _, job := range jobs {
+		if validQueues[job.QueueName] {
+			healthyJobs = append(healthyJobs, job)
+		} else {
+			deadJobs = append(deadJobs, job)
+		}
+	}
+
+	var totalInserted int64
+
+	// save the dead letter jobs
+	if len(deadJobs) > 0 {
+		dq := "INSERT INTO dead_letter_jobs (payload, queue_name, batch_id, error_reason) VALUES "
+		var dArgs []any
+		for i, job := range deadJobs {
+			dq += fmt.Sprintf("($%d, $%d, $%d, $%d),", i*4+1, i*4+2, i*4+3, i*4+4)
+			dArgs = append(dArgs, job.Payload, job.QueueName, job.BatchID, "unregistered_queue_name")
+		}
+		dq = strings.TrimSuffix(dq, ",")
+
+		_, err := r.DB.Exec(dq, dArgs...)
+		if err != nil {
+			return 0, fmt.Errorf("dlq batch routing failed: %w", err)
+		}
+		// Note: We still count these as processed by the ingestion layer
+		totalInserted += int64(len(deadJobs))
+	}
+
+	if len(healthyJobs) > 0 {
+		// save healthy jobs
+		q := "INSERT INTO jobs (payload, runs_at, queue_name, batch_id) VALUES "
+		var args []any
+
+		for i, job := range healthyJobs {
+			q += fmt.Sprintf("($%d, $%d, $%d, $%d),", i*4+1, i*4+2, i*4+3, i*4+4)
+			args = append(args, job.Payload, job.RunsAt, job.QueueName, job.BatchID)
+		}
+
+		q = strings.TrimSuffix(q, ",")
+
+		_, err := r.DB.Exec(q, args...)
+		if err != nil {
+			return 0, err
+		}
+
+		totalInserted += int64(len(healthyJobs))
+	}
+
+	return totalInserted, nil
+
 }
 
 func (r *JobStore) CreateSingleJob(job core.JobRequest) (int, error) {
 	var j core.Job
 
-	err := r.DB.QueryRow(
-		`
+	rows, err := r.DB.Query("SELECT name from queues")
+	if err != nil {
+		return 0, err
+	}
+
+	var validQueues = make(map[string]bool)
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return 0, err
+		}
+	}
+
+	if validQueues[job.QueueName] {
+		err := r.DB.QueryRow(
+			`
         INSERT INTO jobs (payload, runs_at, queue_name)
         VALUES ($1, $2, $3)
         RETURNING id
 		`, job.Payload, job.RunsAt, job.QueueName).Scan(
-		&j.ID,
-	)
+			&j.ID,
+		)
 
-	if err != nil {
-		return j.ID, err
+		if err != nil {
+			return j.ID, err
+		}
+
+		return j.ID, nil
 	}
 
-	return j.ID, nil
+	return 0, errors.New("queue name does not exist in the database")
 }
 
 func (r *JobStore) GetJob(id int) (core.Job, error) {
@@ -261,12 +330,7 @@ func (r *JobStore) FetchPending() ([]core.Job, error) {
 // update job status
 func (r *JobStore) UpdateJobState(id int, state string) (core.Job, error) {
 	var j core.Job
-	_, err := r.DB.Exec("UPDATE jobs SET state = $1 WHERE id = $2 RETURNING id, payload, queue_name, state, retries, max_retries, runs_at, created_at, updated_at", state, id)
-	if err != nil {
-		return core.Job{}, err
-	}
-
-	err = r.DB.QueryRow("SELECT id, payload, queue_name, state, retries, max_retries, runs_at, created_at, updated_at FROM jobs WHERE id = $1", id).Scan(
+	err := r.DB.QueryRow("UPDATE jobs SET state = $1 WHERE id = $2 RETURNING id, payload, queue_name, state, retries, max_retries, runs_at, created_at, updated_at", state, id).Scan(
 		&j.ID,
 		&j.Payload,
 		&j.QueueName,
@@ -277,6 +341,9 @@ func (r *JobStore) UpdateJobState(id int, state string) (core.Job, error) {
 		&j.CreatedAt,
 		&j.UpdatedAt,
 	)
+	if err != nil {
+		return core.Job{}, err
+	}
 
 	return j, nil
 }
@@ -303,13 +370,19 @@ func (r *JobStore) RetryJob(id int, retries int) error {
 	return nil
 }
 
-func (r *JobStore) DeadJob(id int) error {
+func (r *JobStore) DeadJob(job core.Job) error {
 	_, err := r.DB.Exec(`
 		UPDATE jobs
 		SET state = 'dead',
 		updated_at = NOW()
 		WHERE id = $1
-		`, id)
+		`, job.ID)
+	if err != nil {
+		return err
+	}
+	_, err = r.DB.Exec(`
+		INSERT INTO dead_letter_jobs (payload, queue_name, batch_id, error_reason) VALUES ($1,$2, $3, $4)
+		`,job.Payload,job.QueueName, job.BatchID, "job `retry` exceeded maximum retries" )
 	if err != nil {
 		return err
 	}

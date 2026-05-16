@@ -165,6 +165,7 @@ _*NOTE*: make sure to convert your time to UTC_
 GET /jobs/:id
 → { "id": 42, "state": "completed", ... }
 ```
+
 ### Check jobs filtered by status
 
 ```
@@ -215,7 +216,7 @@ correct scheduling across environments.
 | DB_HOST      | Postgres host     |
 | DB_NAME      | Database name     |
 | DB_USER      | Database user     |
-| DB_PASS      | Database password |
+| DB_PASSWORD  | Database password |
 | PORT         | Server port       |
 | KUDA_API_KEY | Authorization     |
 

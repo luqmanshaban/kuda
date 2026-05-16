@@ -33,26 +33,27 @@ func (w Worker) Worker(worker int, jch <-chan core.Job, wg *sync.WaitGroup) {
 			// metrics.JobsFailed.Inc()
 
 			if j.Retries >= j.MaxRetries {
-				if err := w.Store.DeadJob(j.ID); err != nil {
+				if err := w.Store.DeadJob(j); err != nil {
 					slog.Error("failed to mark job dead", "component", "worker", "op", "dead_job", "job_id", j.ID, "error", err)
+					panic(err)
 				} else {
 					slog.Warn("job dead", "component", "worker", "job_id", j.ID, "attempts", j.Retries+1)
 				}
 			} else {
 				if err := w.Store.RetryJob(j.ID, j.Retries); err != nil {
 					slog.Error("failed to schedule retry", "component", "worker", "op", "retry_job", "job_id", j.ID, "error", err)
+					panic(err)
 				} else {
 					slog.Info("job scheduled for retry", "component", "worker", "job_id", j.ID, "attempt", j.Retries+1, "max", j.MaxRetries)
 				}
 			}
 		} else {
-			_, err := w.Store.UpdateJobState(j.ID, "completed")
+			job, err := w.Store.UpdateJobState(j.ID, "completed")
 			if err != nil {
 				slog.Error("failed to mark job completed", "component", "worker", "op", "update_state", "job_id", j.ID, "error", err)
-			} else {
-				// metrics.JobsCompleted.Inc()
-				slog.Info("job completed", "component", "worker", "job_id", j.ID, "worker_id", worker)
+				panic(err)
 			}
+				slog.Info("job completed", "component", "worker", "job_id", job.ID, "worker_id", worker)
 		}
 	}
 }
