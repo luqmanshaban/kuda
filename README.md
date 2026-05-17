@@ -179,6 +179,25 @@ GET /jobs?status=completed
 GET /jobs/batch/{batch_id}
 → [{ "id": 42, "state": "completed", ... }, { "id": 43, "state": "pending", ... }]
 ```
+### Dead Letter Queue (DLQ)
+
+```
+GET /dead-letter-jobs
+→ [
+{
+   "id": 1,
+   "payload": {
+     "task_id": 42624,
+     ...
+   },
+   "queue_name": "ghost-queue-that-does-not-exist",
+   "batch_id": "ae0d406c98ddc3...",
+   "error_reason": "unregistered_queue_name",
+   "created_at": "2026-05-16T19:02:36.568589+03:00"
+ },
+ ...
+]
+```
 
 ### Health check
 
@@ -221,3 +240,15 @@ correct scheduling across environments.
 | KUDA_API_KEY | Authorization     |
 
 _**NOTE**: If `KUDA_API_KEY` is not found in your environment variables, one will be generated on startup and logged to the console. Copy this key and save it to your .env file for future use._
+
+
+## --- _coming soon_ ---
+- [ ] UI Dashboard for displaying quick metrics
+- [ ] webhook signature verification
+- [ ] proper logging
+- [ ] cron / recurring schedules
+- [ ] Advanced job filtering
+- [ ] Queue-level stats
+- [ ] Testing
+- [ ] Idempotency
+- [ ] Detailed Documentation
